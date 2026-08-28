@@ -1,0 +1,21 @@
+@import "tailwindcss";
+@import "bootstrap-icons/font/bootstrap-icons.css";
+
+@media print {
+  body * {
+    visibility: hidden;
+  }
+  main * {
+    visibility: visible;
+  }
+  main {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    padding: 0 !important;
+  }
+  .no-print {
+    display: none !important;
+  }
+}
