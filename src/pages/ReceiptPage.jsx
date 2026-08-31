@@ -160,10 +160,21 @@ export default function ReceiptPage() {
           </Button>
           <h1 className="text-2xl font-semibold text-slate-900 mt-2">Comprobante</h1>
         </div>
-        <Button variant="primary" onClick={() => window.print()}>
-          <i className="bi bi-printer" />
-          Imprimir
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          {receipt.student_id && (
+            <Button
+              variant="success"
+              onClick={() => navigate(`/pagos/nuevo?studentId=${receipt.student_id}`)}
+            >
+              <i className="bi bi-plus-circle" />
+              Agregar más platos
+            </Button>
+          )}
+          <Button variant="primary" onClick={() => window.print()}>
+            <i className="bi bi-printer" />
+            Imprimir
+          </Button>
+        </div>
       </div>
 
       {/* Las dos copias siempre caben en una sola hoja carta: en pantalla
