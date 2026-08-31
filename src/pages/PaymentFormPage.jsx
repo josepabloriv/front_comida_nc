@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -45,6 +45,7 @@ export default function PaymentFormPage() {
     handleSubmit,
     formState: { errors, isSubmitting },
     setError,
+    setValue,
     watch,
   } = useForm({
     resolver: zodResolver(paymentSchema),
@@ -61,6 +62,18 @@ export default function PaymentFormPage() {
   const precioExtra = activity?.precio_plato_extra || 40;
   const totalExtras = cantidadExtras * precioExtra;
   const totalRecibido = Number(montoCuota) + totalExtras;
+
+  // Cuota ya completa: este formulario pasa a usarse solo para agregar
+  // platos extra adicionales a un pago ya existente. Cada envío llama de
+  // nuevo a registrar_pago (vía createPayment), que acumula los platos
+  // extra y genera una nueva versión del QR con el total actualizado.
+  const cuotaCompleta = Boolean(selectedAccount) && Number(selectedAccount.saldo_cuota) <= 0 && Number(selectedAccount.cuota_pagada) > 0;
+
+  useEffect(() => {
+    if (cuotaCompleta) {
+      setValue('montoCuota', 0);
+    }
+  }, [cuotaCompleta, selectedStudentId, setValue]);
 
   const onSubmit = async (values) => {
     if (!selectedStudentId) {
@@ -96,7 +109,9 @@ export default function PaymentFormPage() {
           <i className="bi bi-arrow-left" />
           Volver
         </Button>
-        <h1 className="text-2xl font-semibold text-slate-900 mt-2">Registrar pago</h1>
+        <h1 className="text-2xl font-semibold text-slate-900 mt-2">
+          {cuotaCompleta ? 'Agregar platos extra' : 'Registrar pago'}
+        </h1>
       </div>
 
       {loadingActivity ? (
@@ -166,12 +181,19 @@ export default function PaymentFormPage() {
                   Ya pagó <strong>{formatCurrency(selectedAccount.cuota_pagada)}</strong> de{' '}
                   {formatCurrency(selectedAccount.cuota_base)} ({selectedAccount.total_platos || 0} platos obtenidos).
                 </p>
-                <p className="text-amber-700">
-                  El monto que ingreses abajo se <strong>sumará</strong> a lo ya pagado
-                  {selectedAccount.saldo_cuota > 0 && (
-                    <> — puede agregar hasta {formatCurrency(selectedAccount.saldo_cuota)} más para completar la cuota</>
-                  )}.
-                </p>
+                {cuotaCompleta ? (
+                  <p className="text-amber-700">
+                    La cuota ya está completa. Aquí solo puedes <strong>agregar más platos extra</strong>;
+                    al registrar se generará un <strong>nuevo código QR</strong> con el total de platos actualizado.
+                  </p>
+                ) : (
+                  <p className="text-amber-700">
+                    El monto que ingreses abajo se <strong>sumará</strong> a lo ya pagado
+                    {selectedAccount.saldo_cuota > 0 && (
+                      <> — puede agregar hasta {formatCurrency(selectedAccount.saldo_cuota)} más para completar la cuota</>
+                    )}.
+                  </p>
+                )}
               </div>
             )}
           </CardBody>
@@ -192,6 +214,7 @@ export default function PaymentFormPage() {
                 step="0.01"
                 min="0"
                 max={selectedAccount?.saldo_cuota ?? undefined}
+                disabled={cuotaCompleta}
                 error={errors.montoCuota?.message}
                 {...register('montoCuota')}
               />
@@ -243,7 +266,7 @@ export default function PaymentFormPage() {
               disabled={!selectedStudentId}
             >
               <i className="bi bi-check-circle" />
-              Registrar pago
+              {cuotaCompleta ? 'Agregar platos extra y generar nuevo QR' : 'Registrar pago'}
             </Button>
           </CardBody>
         </Card>

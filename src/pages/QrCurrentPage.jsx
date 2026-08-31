@@ -97,14 +97,25 @@ export default function QrCurrentPage() {
             </div>
           )}
 
-          <Button
-            variant="warning"
-            onClick={() => setShowRegenerateModal(true)}
-            disabled={!accountId}
-          >
-            <i className="bi bi-arrow-clockwise" />
-            Regenerar QR
-          </Button>
+          <div className="flex flex-wrap justify-center gap-2">
+            {id && (
+              <Button
+                variant="success"
+                onClick={() => navigate(`/pagos/nuevo?studentId=${id}`)}
+              >
+                <i className="bi bi-plus-circle" />
+                Agregar más platos
+              </Button>
+            )}
+            <Button
+              variant="warning"
+              onClick={() => setShowRegenerateModal(true)}
+              disabled={!accountId}
+            >
+              <i className="bi bi-arrow-clockwise" />
+              Regenerar QR
+            </Button>
+          </div>
         </CardBody>
       </Card>
 
