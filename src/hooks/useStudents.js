@@ -1,10 +1,11 @@
 import { useQuery } from '@tanstack/react-query';
 import { getStudents, getStudent, getStudentAccount } from '../api/students.api';
 
-export function useStudents({ search = '', grado = '' } = {}) {
+export function useStudents({ search = '', grado = '', enabled = true } = {}) {
   return useQuery({
     queryKey: ['students', { search, grado }],
     queryFn: () => getStudents({ search, grado }),
+    enabled,
   });
 }
 

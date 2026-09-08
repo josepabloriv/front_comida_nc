@@ -1,7 +1,11 @@
 import { useState, useEffect, useRef } from 'react';
-import { validateQr } from '../api/qr.api';
+import { validateQr, getCurrentQr } from '../api/qr.api';
+import { getStudentAccount } from '../api/students.api';
+import { useStudents } from '../hooks/useStudents';
+import { useDebounce } from '../hooks/useDebounce';
 import Card, { CardBody } from '../components/ui/Card';
 import Button from '../components/ui/Button';
+import Input from '../components/ui/Input';
 import Spinner from '../components/ui/Spinner';
 import Badge from '../components/ui/Badge';
 import { formatDateTime } from '../lib/formatters';
@@ -28,16 +32,19 @@ function extractQrToken(decodedText) {
 }
 
 /**
- * Fuerza el tamaño de página a un rollo térmico de 80mm mientras esta
- * pantalla está montada, para el ticket que se imprime al validar un QR.
- * Se retira al salir de la pantalla para no afectar otras impresiones
- * (por ejemplo el comprobante, que usa tamaño carta).
+ * Fuerza el tamaño de página a un rollo térmico de 58mm (impresora 3nStar
+ * RPT001) mientras esta pantalla está montada, para el ticket que se
+ * imprime al validar un QR. Se retira al salir de la pantalla para no
+ * afectar otras impresiones (por ejemplo el comprobante, que usa tamaño
+ * carta). El margen de 4mm por lado deja ~50mm de ancho imprimible, que es
+ * el área útil real de la mayoría de impresoras térmicas de 58mm (el rollo
+ * mide 58mm pero el cabezal no imprime hasta el borde).
  */
 function useThermalPrintSize() {
   useEffect(() => {
     const style = document.createElement('style');
     style.id = 'ticket-print-page-size';
-    style.textContent = '@page { size: 80mm auto; margin: 3mm; }';
+    style.textContent = '@page { size: 58mm auto; margin: 4mm 4mm; }';
     document.head.appendChild(style);
     return () => style.remove();
   }, []);
@@ -48,7 +55,15 @@ export default function QrScanPage() {
   const [loading, setLoading] = useState(false);
   const [cameraActive, setCameraActive] = useState(false);
   const [scannedAt, setScannedAt] = useState(null);
+  const [studentSearch, setStudentSearch] = useState('');
+  const [resolvingStudentId, setResolvingStudentId] = useState(null);
   const scannerRef = useRef(null);
+
+  const debouncedStudentSearch = useDebounce(studentSearch, 300);
+  const { data: studentResults, isLoading: searchingStudents } = useStudents({
+    search: debouncedStudentSearch,
+    enabled: debouncedStudentSearch.trim().length >= 2,
+  });
 
   useThermalPrintSize();
 
@@ -106,9 +121,40 @@ export default function QrScanPage() {
   const reset = () => {
     setScanResult(null);
     setCameraActive(false);
+    setStudentSearch('');
     if (scannerRef.current) {
       try { scannerRef.current.stop(); } catch { /* ignore */ }
       scannerRef.current = null;
+    }
+  };
+
+  /**
+   * Imprime el ticket de un estudiante sin pasar por la cámara: busca su QR
+   * vigente (mismo endpoint que /qr/:id) y lo valida con el mismo RPC
+   * validar_qr() que usa un escaneo real, así el ticket resultante es
+   * idéntico y respeta la regla de que el token siempre se verifica en
+   * PostgreSQL (nunca se confía en datos calculados en el frontend).
+   */
+  const handleSelectStudent = async (student) => {
+    const studentId = student.student_id || student.id;
+    setResolvingStudentId(studentId);
+    try {
+      const account = await getStudentAccount(studentId);
+      // v_estado_cuentas expone el id de cuenta como `account_id`
+      // (Backend/sql/04_sin_deuda_por_pago_parcial.sql: `aa.id AS account_id`).
+      const accountId = account?.account_id;
+      if (!accountId) throw new Error('Este estudiante no tiene una cuenta de actividad.');
+
+      const qr = await getCurrentQr(accountId);
+      const token = qr?.qr_payload?.token || qr?.qr_token;
+      if (!token) throw new Error('Este estudiante no tiene un QR generado.');
+
+      setStudentSearch('');
+      await handleValidate(token);
+    } catch (err) {
+      toast.error(err.message || 'No se pudo obtener el QR del estudiante.');
+    } finally {
+      setResolvingStudentId(null);
     }
   };
 
@@ -230,6 +276,58 @@ export default function QrScanPage() {
           )}
         </CardBody>
       </Card>
+
+      {!cameraActive && (
+        <Card>
+          <CardBody>
+            <p className="text-sm font-medium text-slate-700 mb-1">
+              ¿No puedes usar la cámara?
+            </p>
+            <p className="text-xs text-slate-500 mb-3">
+              Busca al estudiante por nombre e imprime su ticket directamente, sin escanear el QR.
+            </p>
+            <Input
+              value={studentSearch}
+              onChange={(e) => setStudentSearch(e.target.value)}
+              placeholder="Nombre, apellidos o grado..."
+            />
+
+            {debouncedStudentSearch.trim().length >= 2 && (
+              <div className="mt-3 space-y-2">
+                {searchingStudents ? (
+                  <div className="flex justify-center py-4">
+                    <Spinner />
+                  </div>
+                ) : studentResults && studentResults.length > 0 ? (
+                  studentResults.map((student) => {
+                    const studentId = student.student_id || student.id;
+                    const isResolving = resolvingStudentId === studentId;
+                    return (
+                      <button
+                        key={studentId}
+                        type="button"
+                        disabled={!!resolvingStudentId}
+                        onClick={() => handleSelectStudent(student)}
+                        className="w-full flex items-center justify-between gap-2 rounded-lg border border-slate-200 px-3 py-2 text-left hover:bg-slate-50 disabled:opacity-50"
+                      >
+                        <span>
+                          <span className="block text-sm font-medium text-slate-900">
+                            {student.nombre} {student.apellidos}
+                          </span>
+                          <span className="block text-xs text-slate-500">{student.grado}</span>
+                        </span>
+                        {isResolving ? <Spinner size="sm" /> : <i className="bi bi-printer text-slate-400" />}
+                      </button>
+                    );
+                  })
+                ) : (
+                  <p className="text-sm text-slate-500 text-center py-2">Sin resultados.</p>
+                )}
+              </div>
+            )}
+          </CardBody>
+        </Card>
+      )}
     </div>
   );
 }

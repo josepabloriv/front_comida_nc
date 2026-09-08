@@ -19,7 +19,7 @@ export default function QrCurrentPage() {
 
   const { data: student } = useStudent(id);
   const { data: account } = useStudentAccount(id);
-  const accountId = account?.activity_account_id;
+  const accountId = account?.account_id;
   const { data: qr, isLoading: loadingQr } = useCurrentQr(accountId);
   const { data: history, isLoading: loadingHistory } = useQrHistory(accountId);
   const regenerateQr = useRegenerateQr();
