@@ -84,7 +84,7 @@ export default function StudentDetailPage() {
             <i className="bi bi-credit-card" />
             Registrar pago
           </Button>
-          {cuenta.activity_account_id && (
+          {cuenta.account_id && (
             <Button variant="primary" onClick={() => navigate(`/estudiantes/${id}/qr`)}>
               <i className="bi bi-qr-code" />
               Ver QR
